@@ -24,6 +24,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <iostream>
 
 #include "abstractions.h"
 
@@ -31,6 +32,8 @@ using namespace v8;
 
 #define LOCAL_STRING(s) Nan::New<String>(s).ToLocalChecked()
 #define LOOKUP_CALLBACK(map, name) map->Has(LOCAL_STRING(name)) ? new Nan::Callback(map->Get(LOCAL_STRING(name)).As<Function>()) : NULL
+
+static struct fuse_chan *ch = NULL;
 
 enum bindings_ops_t {
   OP_INIT = 0,
@@ -703,7 +706,10 @@ static thread_fn_rtn_t bindings_thread (void *data) {
   };
 
   struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
-  struct fuse_chan *ch = fuse_mount(b->mnt, &args);
+
+ // struct fuse_chan *ch = fuse_mount(b->mnt, &args);
+    ch = fuse_mount(b->mnt, &args);
+
 
   if (ch == NULL) {
     b->op = OP_ERROR;
@@ -1280,12 +1286,21 @@ class UnmountWorker : public Nan::AsyncWorker {
   ~UnmountWorker() {}
 
   void Execute () {
-    result = bindings_unmount(path);
-    free(path);
 
-    if (result != 0) {
-      SetErrorMessage("Error");
-    }
+    if(NULL == ch){
+        result = bindings_unmount(path);
+        free(path);
+
+        if (result != 0) {
+          SetErrorMessage("Error");
+        }
+     }
+     else {
+       fuse_unmount(path, ch);
+       fuse_session_remove_chan(ch);
+
+     }
+
   }
 
   void HandleOKCallback () {
